@@ -1,7 +1,7 @@
 {
   "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"ls /Users/deepak/HabitKIT/ 2>/dev/null && echo \\\"---\\\" && ls /Users/deepak/.claude/projects/-Users-deepak-HabitKIT/memory/ 2>/dev/null\",\"description\":\"Check project directory and memory fi...",
-  "error": "Exit code 1\n---",
-  "timestamp": "2026-06-02T06:32:08.410Z",
+  "tool_input_preview": "{\"command\":\"ls /Users/deepak/HabitKIT/HabitKIT/HabitKIT/ 2>/dev/null && echo \\\"---\\\" && cat /Users/deepak/HabitKIT/HabitKIT/HabitKIT/HabitKITApp.swift 2>/dev/null\",\"description\":\"Check Xcode's generat...",
+  "error": "Exit code 1\nHabitKIT\nHabitKIT.xcodeproj\n---",
+  "timestamp": "2026-06-02T14:36:01.011Z",
   "retry_count": 1
 }
