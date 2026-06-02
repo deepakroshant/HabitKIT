@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"ls /Users/deepak/HabitKIT/ 2>/dev/null && echo \\\"---\\\" && ls /Users/deepak/.claude/projects/-Users-deepak-HabitKIT/memory/ 2>/dev/null\",\"description\":\"Check project directory and memory fi...",
+  "error": "Exit code 1\n---",
+  "timestamp": "2026-06-02T06:32:08.410Z",
+  "retry_count": 1
+}
