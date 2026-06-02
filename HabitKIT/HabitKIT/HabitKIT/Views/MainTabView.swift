@@ -5,15 +5,15 @@ struct MainTabView: View {
         TabView {
             HomeView()
                 .tabItem {
-                    Label("Today", systemImage: "square.grid.2x2")
+                    Label("Today", systemImage: "checkmark.circle.fill")
                 }
             StatsView()
                 .tabItem {
-                    Label("Stats", systemImage: "chart.bar")
+                    Label("Stats", systemImage: "chart.bar.fill")
                 }
             SettingsView()
                 .tabItem {
-                    Label("Settings", systemImage: "gearshape")
+                    Label("Settings", systemImage: "gearshape.fill")
                 }
         }
         .tint(.green)

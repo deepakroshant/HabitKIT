@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UserNotifications
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var context
@@ -9,6 +10,7 @@ struct SettingsView: View {
     @AppStorage("notificationsEnabled") private var notificationsEnabled = false
     @State private var showResetAlert = false
     @State private var notifDenied = false
+    @State private var testSent = false
 
     var body: some View {
         NavigationStack {
@@ -24,6 +26,12 @@ struct SettingsView: View {
                             .font(.subheadline).foregroundStyle(.secondary)
                         Label("8:00 PM — evening check-in", systemImage: "moon.fill")
                             .font(.subheadline).foregroundStyle(.secondary)
+
+                        Button(testSent ? "Test sent! Lock your screen ✓" : "Send test notification (5 sec)") {
+                            sendTestNotification()
+                        }
+                        .foregroundStyle(testSent ? .green : .blue)
+                        .disabled(testSent)
                     }
                     if notifDenied {
                         Text("Notifications are blocked. Go to Settings → HabitKIT → Notifications to enable.")
@@ -78,6 +86,35 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    private func sendTestNotification() {
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            guard settings.authorizationStatus == .authorized else { return }
+            let pending = habits.filter { habit in
+                habit.entries.first { Calendar.current.isDateInToday($0.completedAt) } == nil
+            }.count
+
+            let content = UNMutableNotificationContent()
+            if pending == 0 {
+                content.title = "Crushed it today! 🎉"
+                content.body  = "All \(habits.count) habits done. Keep the streak alive tomorrow!"
+            } else {
+                let done = habits.count - pending
+                content.title = done == 0 ? "Evening check-in 🌙" : "Almost there! 🌙"
+                content.body  = done == 0
+                    ? "None of today's \(habits.count) habits logged yet — still time!"
+                    : "\(done)/\(habits.count) habits done — \(pending) left for today."
+            }
+            content.sound = .default
+
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false)
+            let request = UNNotificationRequest(identifier: "habitkit-test", content: content, trigger: trigger)
+            UNUserNotificationCenter.current().add(request)
+        }
+
+        DispatchQueue.main.async { testSent = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8) { testSent = false }
     }
 
     private func resetAll() {

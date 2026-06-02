@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import Combine
 
 struct HomeView: View {
     @Environment(\.modelContext) private var context
@@ -9,92 +10,214 @@ struct HomeView: View {
     @State private var selectedDay: Date = Date().startOfDay
     @State private var showAddSheet = false
     @State private var habitToEdit: Habit? = nil
+    @State private var habitToPause: Habit? = nil
+    @State private var entryToNote: HabitEntry? = nil
+    @State private var now = Date()
+    @State private var confettiTrigger = 0
+    @State private var showHeatmaps = false
 
-    private var doneCount: Int {
-        habits.filter { h in h.entries.contains { $0.date == selectedDay } }.count
+    private let timer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
+
+    private func entry(for habit: Habit) -> HabitEntry? {
+        habit.entries.first { $0.date == selectedDay }
     }
+
+    private var activeHabits: [Habit] { habits.filter { !$0.isPaused } }
+    private var pending: [Habit] { activeHabits.filter { entry(for: $0) == nil } }
+    private var done: [Habit]    { activeHabits.filter { entry(for: $0) != nil } }
+    private var paused: [Habit]  { habits.filter { $0.isPaused } }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // Day picker strip
-                DayStripView(selectedDay: $selectedDay)
-                    .padding(.bottom, 4)
+            ZStack {
+                VStack(spacing: 0) {
+                    dateHeader
 
-                if habits.isEmpty {
-                    emptyState
-                } else {
-                    // Progress bar
-                    VStack(spacing: 6) {
-                        HStack {
-                            Text(selectedDay == Date().startOfDay ? "Today" : selectedDay.formatted(.dateTime.weekday(.wide).month().day()))
-                                .font(.subheadline).fontWeight(.semibold).foregroundStyle(.secondary)
-                            Spacer()
-                            Text("\(doneCount) / \(habits.count)")
-                                .font(.subheadline).fontWeight(.bold)
-                                .foregroundStyle(doneCount == habits.count ? .green : .secondary)
+                    if !habits.isEmpty {
+                        Picker("View", selection: $showHeatmaps) {
+                            Text("Today").tag(false)
+                            Text("Heatmaps").tag(true)
                         }
+                        .pickerStyle(.segmented)
                         .padding(.horizontal, 16)
+                        .padding(.bottom, 6)
 
-                        GeometryReader { geo in
-                            ZStack(alignment: .leading) {
-                                RoundedRectangle(cornerRadius: 3)
-                                    .fill(Color.white.opacity(0.07))
-                                RoundedRectangle(cornerRadius: 3)
-                                    .fill(Color.green)
-                                    .frame(width: habits.isEmpty ? 0 : geo.size.width * CGFloat(doneCount) / CGFloat(habits.count))
-                            }
+                        if !showHeatmaps {
+                            DayStripView(selectedDay: $selectedDay)
                         }
-                        .frame(height: 4)
-                        .padding(.horizontal, 16)
-                        .animation(.spring(duration: 0.3), value: doneCount)
                     }
-                    .padding(.top, 10)
-                    .padding(.bottom, 8)
+                    Divider().opacity(habits.isEmpty ? 0 : 0.15)
 
-                    ScrollView {
-                        LazyVStack(spacing: 10) {
-                            ForEach(habits) { habit in
-                                QuickLogCard(
-                                    habit: habit,
-                                    day: selectedDay,
-                                    onToggle: { toggle(habit: habit, on: selectedDay) },
-                                    onDetail: { habitToEdit = nil }
-                                )
-                                .contextMenu {
-                                    Button("Edit") { habitToEdit = habit }
-                                    Button("Delete", role: .destructive) { delete(habit) }
-                                }
-                                // Navigate to detail on card tap (not toggle)
-                                .background(
-                                    NavigationLink("", destination: HabitDetailView(habit: habit))
-                                        .opacity(0)
-                                )
-                            }
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 40)
+                    if habits.isEmpty {
+                        emptyState
+                    } else if showHeatmaps {
+                        heatmapList
+                    } else {
+                        taskList
                     }
                 }
-            }
-            .navigationTitle("Habits")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showAddSheet = true } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 22))
-                            .foregroundStyle(.green)
-                    }
+                .navigationBarHidden(true)
+                .sheet(isPresented: $showAddSheet) { AddEditHabitView(habit: nil) }
+                .sheet(item: $habitToEdit) { AddEditHabitView(habit: $0) }
+                .sheet(item: $habitToPause) { PauseHabitSheet(habit: $0) }
+                .sheet(item: $entryToNote) { AddNoteSheet(entry: $0) }
+                .onChange(of: habits.count) {
+                    rescheduleNotifications()
                 }
-            }
-            .sheet(isPresented: $showAddSheet) { AddEditHabitView(habit: nil) }
-            .sheet(item: $habitToEdit) { AddEditHabitView(habit: $0) }
-            .onChange(of: habits.count) {
-                if notificationsEnabled { NotificationManager.shared.scheduleDailyReminders(habits: habits) }
+                .onReceive(timer) { now = $0 }
+
+                ConfettiView(trigger: $confettiTrigger)
             }
         }
         .preferredColorScheme(.dark)
+    }
+
+    // MARK: - Date Header
+
+    private var dateHeader: some View {
+        HStack(alignment: .bottom) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(selectedDay, format: .dateTime.weekday(.wide).month(.wide).day())
+                    .font(.system(size: 26, weight: .bold))
+                if selectedDay == Date().startOfDay {
+                    Text(now, format: .dateTime.hour().minute())
+                        .font(.system(size: 14)).foregroundStyle(.secondary)
+                } else {
+                    Text("Logging past day")
+                        .font(.system(size: 14)).foregroundStyle(.orange)
+                }
+            }
+            Spacer()
+            Button { showAddSheet = true } label: {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 28)).foregroundStyle(.green)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 16)
+        .padding(.bottom, 10)
+    }
+
+    // MARK: - Heatmap List
+
+    private var heatmapList: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                ForEach(activeHabits) { habit in
+                    NavigationLink(destination: HabitDetailView(habit: habit)) {
+                        HabitRowView(habit: habit) { date in toggleEntry(habit: habit, date: date) }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .padding(.bottom, 60)
+        }
+    }
+
+    // MARK: - Task List
+
+    private var taskList: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+
+                // Pending
+                if !pending.isEmpty {
+                    sectionLabel(pending.count == activeHabits.count
+                        ? "\(pending.count) habits today"
+                        : "\(pending.count) remaining")
+
+                    VStack(spacing: 10) {
+                        ForEach(pending) { habit in
+                            PendingHabitRow(habit: habit) { logNow(habit: habit) }
+                                .contextMenu {
+                                    Button("Edit") { habitToEdit = habit }
+                                    Button("Pause") { habitToPause = habit }
+                                    Divider()
+                                    Button("Move Up")   { moveHabit(habit, by: -1) }
+                                    Button("Move Down") { moveHabit(habit, by: +1) }
+                                    Divider()
+                                    Button("Delete", role: .destructive) { delete(habit) }
+                                }
+                                .background(
+                                    NavigationLink("", destination: HabitDetailView(habit: habit)).opacity(0)
+                                )
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
+
+                // Done
+                if !done.isEmpty {
+                    sectionLabel("Done · \(done.count)")
+                        .padding(.top, pending.isEmpty ? 0 : 20)
+
+                    VStack(spacing: 10) {
+                        ForEach(done) { habit in
+                            DoneHabitRow(
+                                habit: habit,
+                                completedAt: entry(for: habit)?.completedAt,
+                                note: entry(for: habit)?.note ?? "",
+                                onUndo: { undo(habit: habit) },
+                                onAddNote: { entryToNote = entry(for: habit) }
+                            )
+                            .background(
+                                NavigationLink("", destination: HabitDetailView(habit: habit)).opacity(0)
+                            )
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
+
+                // All-done celebration
+                if pending.isEmpty && !activeHabits.isEmpty {
+                    VStack(spacing: 8) {
+                        Text("🎉").font(.system(size: 36))
+                        Text("All done for \(selectedDay == Date().startOfDay ? "today" : "this day")!")
+                            .font(.headline).fontWeight(.bold)
+                        Text("Keep the streak going tomorrow.")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 32)
+                }
+
+                // Paused habits section
+                if !paused.isEmpty {
+                    sectionLabel("Paused · \(paused.count)")
+                        .padding(.top, 28)
+
+                    VStack(spacing: 10) {
+                        ForEach(paused) { habit in
+                            PausedHabitRow(habit: habit) {
+                                habit.isPaused    = false
+                                habit.pauseReason = ""
+                                habit.pausedAt    = nil
+                                if hapticsEnabled { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
+                                try? context.save()
+                                rescheduleNotifications()
+                            }
+                            .contextMenu {
+                                Button("Edit")   { habitToEdit = habit }
+                                Button("Delete", role: .destructive) { delete(habit) }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
+            }
+            .padding(.top, 12)
+            .padding(.bottom, 60)
+        }
+    }
+
+    private func sectionLabel(_ text: String) -> some View {
+        Text(text.uppercased())
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
     }
 
     private var emptyState: some View {
@@ -111,134 +234,252 @@ struct HomeView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private func toggle(habit: Habit, on date: Date) {
+    // MARK: - Actions
+
+    private func logNow(habit: Habit) {
+        let now = Date()
+        let e = HabitEntry(date: selectedDay == Date().startOfDay ? now : selectedDay, habit: habit)
+        if selectedDay != Date().startOfDay { e.completedAt = selectedDay }
+        context.insert(e)
+        habit.entries.append(e)
+        if hapticsEnabled { UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
+        try? context.save()
+        confettiTrigger += 1
+        rescheduleNotifications()
+    }
+
+    private func undo(habit: Habit) {
+        if let existing = habit.entries.first(where: { $0.date == selectedDay }) {
+            context.delete(existing)
+            habit.entries.removeAll { $0.date == selectedDay }
+            if hapticsEnabled { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
+            try? context.save()
+            rescheduleNotifications()
+        }
+    }
+
+    private func toggleEntry(habit: Habit, date: Date) {
         let day = date.startOfDay
         if let existing = habit.entries.first(where: { $0.date == day }) {
             context.delete(existing)
             habit.entries.removeAll { $0.date == day }
         } else {
-            let entry = HabitEntry(date: day, habit: habit)
-            context.insert(entry)
-            habit.entries.append(entry)
-            if hapticsEnabled { UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
+            let e = HabitEntry(date: date, habit: habit)
+            context.insert(e)
+            habit.entries.append(e)
         }
+        if hapticsEnabled { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
+        try? context.save()
+    }
+
+    private func moveHabit(_ habit: Habit, by delta: Int) {
+        let sorted = habits.sorted { $0.sortOrder < $1.sortOrder }
+        guard let idx = sorted.firstIndex(where: { $0.id == habit.id }) else { return }
+        let swapIdx = idx + delta
+        guard swapIdx >= 0, swapIdx < sorted.count else { return }
+        let neighbor = sorted[swapIdx]
+        let tmp = habit.sortOrder
+        habit.sortOrder = neighbor.sortOrder
+        neighbor.sortOrder = tmp
+        if hapticsEnabled { UIImpactFeedbackGenerator(style: .rigid).impactOccurred() }
         try? context.save()
     }
 
     private func delete(_ habit: Habit) {
+        NotificationManager.shared.cancelHabitReminder(habit: habit)
         context.delete(habit)
         try? context.save()
     }
-}
 
-// MARK: - Day Strip
-
-struct DayStripView: View {
-    @Binding var selectedDay: Date
-    private let days: [Date] = (0..<14).reversed().map { Date().startOfDay.adding(days: -$0) }
-    private let dayFmt: DateFormatter = { let f = DateFormatter(); f.dateFormat = "EEE"; return f }()
-    private let numFmt: DateFormatter = { let f = DateFormatter(); f.dateFormat = "d"; return f }()
-
-    var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(days, id: \.self) { day in
-                        let isSelected = day == selectedDay
-                        let isToday = day == Date().startOfDay
-                        Button(action: { selectedDay = day }) {
-                            VStack(spacing: 3) {
-                                Text(dayFmt.string(from: day).uppercased())
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundStyle(isSelected ? .black : .secondary)
-                                Text(numFmt.string(from: day))
-                                    .font(.system(size: 17, weight: .bold))
-                                    .foregroundStyle(isSelected ? .black : (isToday ? .green : .primary))
-                            }
-                            .frame(width: 44, height: 56)
-                            .background(isSelected ? Color.green : Color.white.opacity(0.07))
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(isToday && !isSelected ? Color.green.opacity(0.5) : .clear, lineWidth: 1.5)
-                            )
-                        }
-                        .id(day)
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-            }
-            .onAppear {
-                proxy.scrollTo(Date().startOfDay, anchor: .trailing)
-            }
-        }
+    private func rescheduleNotifications() {
+        guard notificationsEnabled else { return }
+        NotificationManager.shared.scheduleDailyReminders(habits: activeHabits, pendingToday: pending.count)
     }
 }
 
-// MARK: - Quick Log Card
+// MARK: - Pending Habit Row
 
-struct QuickLogCard: View {
+struct PendingHabitRow: View {
     let habit: Habit
-    let day: Date
-    let onToggle: () -> Void
-    let onDetail: () -> Void
+    let onDidIt: () -> Void
 
-    private var isDone: Bool {
-        habit.entries.contains { $0.date == day }
-    }
     private var accentColor: Color { Color(hex: habit.colorHex) ?? .green }
-    private var streak: Int { HabitStats.calculate(for: habit).currentStreak }
+    private var stats: HabitStats { HabitStats.calculate(for: habit) }
+    @State private var pressed = false
+    @State private var tapped  = false
 
     var body: some View {
         HStack(spacing: 14) {
-            // Icon
             Text(habit.icon)
                 .font(.system(size: 22))
                 .frame(width: 48, height: 48)
-                .background(accentColor.opacity(isDone ? 0.25 : 0.1))
+                .background(accentColor.opacity(0.12))
                 .clipShape(RoundedRectangle(cornerRadius: 13))
 
-            // Name + streak
             VStack(alignment: .leading, spacing: 3) {
-                Text(habit.name)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(isDone ? .primary : .primary)
-                if streak > 0 {
-                    Text("🔥 \(streak) day streak")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Text(habit.name).font(.system(size: 16, weight: .semibold))
+                    if habit.targetPerWeek > 0 {
+                        Text("\(habit.targetPerWeek)×/wk")
+                            .font(.system(size: 10, weight: .medium))
+                            .padding(.horizontal, 5).padding(.vertical, 2)
+                            .background(accentColor.opacity(0.18))
+                            .clipShape(Capsule())
+                            .foregroundStyle(accentColor)
+                    }
+                }
+                if stats.currentStreak > 0 {
+                    Text("🔥 \(stats.currentStreak) \(stats.streakUnit) streak")
+                        .font(.system(size: 12)).foregroundStyle(.secondary)
                 } else {
-                    Text("Start your streak today")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.white.opacity(0.3))
+                    Text("Start your streak!")
+                        .font(.system(size: 12)).foregroundStyle(Color.white.opacity(0.3))
                 }
             }
 
             Spacer()
 
-            // Big check button
-            Button(action: onToggle) {
-                ZStack {
-                    Circle()
-                        .fill(isDone ? accentColor : Color.white.opacity(0.08))
-                        .frame(width: 48, height: 48)
-                    Image(systemName: isDone ? "checkmark" : "circle")
-                        .font(.system(size: isDone ? 20 : 22, weight: .bold))
-                        .foregroundStyle(isDone ? .black : Color.white.opacity(0.3))
-                }
+            Button(action: {
+                withAnimation(.spring(response: 0.25, dampingFraction: 0.5)) { tapped = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { onDidIt() }
+            }) {
+                Text("Did It!")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+                    .background(accentColor)
+                    .clipShape(Capsule())
+                    .scaleEffect(tapped ? 1.18 : (pressed ? 0.94 : 1.0))
             }
             .buttonStyle(.plain)
-            .animation(.spring(duration: 0.25, bounce: 0.4), value: isDone)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in pressed = true }
+                    .onEnded   { _ in pressed = false }
+            )
+            .animation(.easeInOut(duration: 0.1), value: pressed)
         }
         .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(UIColor.secondarySystemBackground))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(isDone ? accentColor.opacity(0.3) : .clear, lineWidth: 1.5)
-                )
-        )
+        .background(Color(UIColor.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+}
+
+// MARK: - Done Habit Row
+
+struct DoneHabitRow: View {
+    let habit: Habit
+    let completedAt: Date?
+    let note: String
+    let onUndo: () -> Void
+    let onAddNote: () -> Void
+
+    private var accentColor: Color { Color(hex: habit.colorHex) ?? .green }
+
+    private var timeLabel: String {
+        guard let t = completedAt else { return "" }
+        return t.formatted(.dateTime.hour().minute())
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Text(habit.icon)
+                .font(.system(size: 22))
+                .frame(width: 48, height: 48)
+                .background(accentColor.opacity(0.2))
+                .clipShape(RoundedRectangle(cornerRadius: 13))
+                .opacity(0.7)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(habit.name)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.primary.opacity(0.7))
+                Text("✓ Done at \(timeLabel)")
+                    .font(.system(size: 12)).foregroundStyle(accentColor.opacity(0.8))
+                if !note.isEmpty {
+                    Text(note)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer()
+
+            HStack(spacing: 8) {
+                Button(action: onAddNote) {
+                    Image(systemName: note.isEmpty ? "note.text.badge.plus" : "pencil")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 30, height: 30)
+                        .background(Color.white.opacity(0.07))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+
+                Button(action: onUndo) {
+                    Text("Undo")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 12).padding(.vertical, 7)
+                        .background(Color.white.opacity(0.07))
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(14)
+        .background(Color(UIColor.secondarySystemBackground).opacity(0.6))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(accentColor.opacity(0.25), lineWidth: 1))
+    }
+}
+
+// MARK: - Paused Habit Row
+
+struct PausedHabitRow: View {
+    let habit: Habit
+    let onResume: () -> Void
+
+    private var accentColor: Color { Color(hex: habit.colorHex) ?? .green }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Text(habit.icon)
+                .font(.system(size: 22))
+                .frame(width: 48, height: 48)
+                .background(Color.white.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 13))
+                .opacity(0.5)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(habit.name)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.primary.opacity(0.5))
+                if !habit.pauseReason.isEmpty {
+                    Text(habit.pauseReason)
+                        .font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
+                } else if let pausedAt = habit.pausedAt {
+                    Text("Paused \(pausedAt.formatted(.relative(presentation: .named)))")
+                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer()
+
+            Button(action: onResume) {
+                Text("Resume")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 12).padding(.vertical, 7)
+                    .background(Color.orange.opacity(0.12))
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(14)
+        .background(Color(UIColor.secondarySystemBackground).opacity(0.4))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.orange.opacity(0.2), lineWidth: 1))
     }
 }
