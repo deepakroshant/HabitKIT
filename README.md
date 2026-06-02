@@ -1,6 +1,6 @@
 # HabitKIT — Free iOS Habit Tracker
 
-A pixel-faithful, free clone of the paid [HabitKit](https://apps.apple.com/app/habitkit/id1445651730) iOS app, built with **SwiftUI + SwiftData**. Runs entirely on-device — no account, no subscription, no server.
+A free, open-source iOS habit tracker built with **SwiftUI + SwiftData**. Runs entirely on-device — no account, no subscription, no server.
 
 ---
 
