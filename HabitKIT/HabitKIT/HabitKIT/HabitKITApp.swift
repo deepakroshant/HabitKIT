@@ -26,20 +26,8 @@ struct HabitKITApp: App {
 
     static func makeContainer() -> ModelContainer {
         let schema = Schema([Habit.self, HabitEntry.self])
-
-        // Try CloudKit-backed container first (syncs data across reinstalls via iCloud)
-        let cloudConfig = ModelConfiguration(
-            schema: schema,
-            cloudKitDatabase: .automatic
-        )
-        if let c = try? ModelContainer(for: schema, configurations: cloudConfig) {
-            return c
-        }
-
-        // CloudKit unavailable (no iCloud account, simulator, etc.) — fall back to local store
         if let c = try? ModelContainer(for: schema) { return c }
-
-        // Schema changed — wipe local store and start fresh
+        // Schema changed — wipe store and start fresh
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         if let contents = try? FileManager.default.contentsOfDirectory(at: support, includingPropertiesForKeys: nil) {
             for url in contents where url.lastPathComponent.contains(".store") {
