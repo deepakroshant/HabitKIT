@@ -109,7 +109,7 @@ struct HabitDetailView: View {
         }
         .sheet(isPresented: $showShareSheet) {
             if let img = shareImage {
-                ShareSheet(image: img)
+                ShareSheet(items: [img])
             }
         }
         .preferredColorScheme(.dark)
@@ -158,10 +158,3 @@ private struct StatCard: View {
     }
 }
 
-struct ShareSheet: UIViewControllerRepresentable {
-    let image: UIImage
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: [image], applicationActivities: nil)
-    }
-    func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
-}

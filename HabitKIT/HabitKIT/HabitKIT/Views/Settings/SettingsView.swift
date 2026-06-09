@@ -109,7 +109,7 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showExportShare) {
                 if let url = exportURL {
-                    ShareSheet(url: url)
+                    ShareSheet(items: [url])
                 }
             }
             .fileImporter(
@@ -186,9 +186,9 @@ struct SettingsView: View {
 // MARK: - Share Sheet wrapper
 
 struct ShareSheet: UIViewControllerRepresentable {
-    let url: URL
+    let items: [Any]
     func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
     }
     func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
 }
