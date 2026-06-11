@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 
 struct MainTabView: View {
+    @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @Query private var habits: [Habit]
 
@@ -23,7 +24,10 @@ struct MainTabView: View {
         .tint(.green)
         .preferredColorScheme(.dark)
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active {
+            guard phase == .active else { return }
+            if habits.isEmpty {
+                BackupManager.shared.autoRestore(context: modelContext)
+            } else {
                 BackupManager.shared.autoExport(habits: habits)
             }
         }
