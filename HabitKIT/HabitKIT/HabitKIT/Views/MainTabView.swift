@@ -1,6 +1,10 @@
 import SwiftUI
+import SwiftData
 
 struct MainTabView: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @Query private var habits: [Habit]
+
     var body: some View {
         TabView {
             HomeView()
@@ -18,5 +22,10 @@ struct MainTabView: View {
         }
         .tint(.green)
         .preferredColorScheme(.dark)
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                BackupManager.shared.autoExport(habits: habits)
+            }
+        }
     }
 }

@@ -37,9 +37,31 @@ final class BackupManager {
     static let shared = BackupManager()
     private init() {}
 
-    // MARK: Export → returns a URL to a temp .json file ready to share
+    // MARK: Auto-export → silently overwrites Documents/habitkit-auto-backup.json
+
+    func autoExport(habits: [Habit]) {
+        guard !habits.isEmpty else { return }
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let url = docs.appendingPathComponent("habitkit-auto-backup.json")
+        guard let data = try? makeBackupData(habits: habits) else { return }
+        try? data.write(to: url, options: .atomic)
+    }
+
+    // MARK: Export → returns a URL to a temp dated .json file ready to share
 
     func export(habits: [Habit]) throws -> URL {
+        let data = try makeBackupData(habits: habits)
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd"
+        let filename = "habitkit-backup-\(fmt.string(from: Date())).json"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+        try data.write(to: url, options: .atomic)
+        return url
+    }
+
+    // MARK: Shared encoder
+
+    private func makeBackupData(habits: [Habit]) throws -> Data {
         let dtos = habits.map { h in
             HabitBackup.HabitDTO(
                 id: h.id,
@@ -59,20 +81,10 @@ final class BackupManager {
                 }
             )
         }
-
-        let backup = HabitBackup(exportedAt: Date(), habits: dtos)
-
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let data = try encoder.encode(backup)
-
-        let fmt = DateFormatter()
-        fmt.dateFormat = "yyyy-MM-dd"
-        let filename = "habitkit-backup-\(fmt.string(from: Date())).json"
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
-        try data.write(to: url, options: .atomic)
-        return url
+        return try encoder.encode(HabitBackup(exportedAt: Date(), habits: dtos))
     }
 
     // MARK: Import — deletes existing data, recreates from backup file
