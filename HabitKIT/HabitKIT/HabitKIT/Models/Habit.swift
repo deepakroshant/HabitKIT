@@ -6,6 +6,7 @@ final class Habit {
     // CloudKit requires all non-optional stored properties to have default values
     var id: UUID = UUID()
     var name: String = ""
+    var subtitle: String = ""
     var icon: String = "⭐"
     var colorHex: String = "#4FC14F"
     var createdAt: Date = Date()

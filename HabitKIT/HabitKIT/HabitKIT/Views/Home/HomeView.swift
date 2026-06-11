@@ -328,6 +328,11 @@ struct PendingHabitRow: View {
                             .foregroundStyle(accentColor)
                     }
                 }
+                if !habit.subtitle.isEmpty {
+                    Text(habit.subtitle)
+                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
                 if stats.currentStreak > 0 {
                     Text("🔥 \(stats.currentStreak) \(stats.streakUnit) streak")
                         .font(.system(size: 12)).foregroundStyle(.secondary)

@@ -9,6 +9,7 @@ struct AddEditHabitView: View {
     let habit: Habit?
 
     @State private var name: String = ""
+    @State private var subtitle: String = ""
     @State private var icon: String = "⭐"
     @State private var colorHex: String = "#4FC14F"
     @State private var targetPerWeek: Int = 0
@@ -34,6 +35,9 @@ struct AddEditHabitView: View {
                 Section("Name") {
                     TextField("e.g. Go to the gym", text: $name)
                         .font(.system(size: 16))
+                    TextField("Subtitle (optional)", text: $subtitle)
+                        .font(.system(size: 14))
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("Icon") {
@@ -87,6 +91,7 @@ struct AddEditHabitView: View {
             .onAppear {
                 if let h = habit {
                     name                  = h.name
+                    subtitle              = h.subtitle
                     icon                  = h.icon
                     colorHex              = h.colorHex
                     targetPerWeek         = h.targetPerWeek
@@ -102,6 +107,7 @@ struct AddEditHabitView: View {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         if let h = habit {
             h.name                  = trimmed
+            h.subtitle              = subtitle
             h.icon                  = icon
             h.colorHex              = colorHex
             h.targetPerWeek         = targetPerWeek
@@ -114,6 +120,7 @@ struct AddEditHabitView: View {
             }
         } else {
             let h = Habit(name: trimmed, icon: icon, colorHex: colorHex, sortOrder: habits.count)
+            h.subtitle              = subtitle
             h.targetPerWeek         = targetPerWeek
             h.customReminderEnabled = customReminderEnabled
             h.customReminderTime    = customReminderTime

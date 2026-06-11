@@ -12,6 +12,7 @@ struct HabitBackup: Codable {
     struct HabitDTO: Codable {
         var id: UUID
         var name: String
+        var subtitle: String
         var icon: String
         var colorHex: String
         var createdAt: Date
@@ -59,6 +60,7 @@ final class BackupManager {
             let habit = Habit(name: dto.name, icon: dto.icon,
                               colorHex: dto.colorHex, sortOrder: dto.sortOrder)
             habit.id                    = dto.id
+            habit.subtitle              = dto.subtitle
             habit.createdAt             = dto.createdAt
             habit.isPaused              = dto.isPaused
             habit.pauseReason           = dto.pauseReason
@@ -123,6 +125,7 @@ final class BackupManager {
             HabitBackup.HabitDTO(
                 id: h.id,
                 name: h.name,
+                subtitle: h.subtitle,
                 icon: h.icon,
                 colorHex: h.colorHex,
                 createdAt: h.createdAt,
@@ -163,6 +166,7 @@ final class BackupManager {
             let habit = Habit(name: dto.name, icon: dto.icon,
                               colorHex: dto.colorHex, sortOrder: dto.sortOrder)
             habit.id                    = dto.id
+            habit.subtitle              = dto.subtitle
             habit.createdAt             = dto.createdAt
             habit.isPaused              = dto.isPaused
             habit.pauseReason           = dto.pauseReason
